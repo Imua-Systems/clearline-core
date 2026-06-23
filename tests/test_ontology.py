@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import json
 
 import pytest
 
@@ -349,3 +350,26 @@ def test_failure_mode_diagnostic_full():
     assert len(diagnostic.assumptions) == 1
     assert len(diagnostic.recommended_next_observation) == 1
     assert diagnostic.ontology_version == "clearline-ontology-v1.0"
+
+
+def test_json_schema_export(tmp_path):
+    """Schema export produces valid JSON files for all six models."""
+    from clearline.ontology.v1.export import export_schemas
+
+    export_schemas(out_dir=tmp_path)
+
+    expected_files = [
+        "work_item.json",
+        "state_transition.json",
+        "field_mapping.json",
+        "mapping_set.json",
+        "diagnostic_reliability.json",
+        "failure_mode_diagnostic.json",
+    ]
+    for filename in expected_files:
+        path = tmp_path / filename
+        assert path.exists(), f"Missing schema file: {filename}"
+        schema = json.loads(path.read_text())
+        assert "x-ontology-version" in schema
+        assert "x-generated-at" in schema
+        assert schema["x-ontology-version"] == "clearline-ontology-v1.0"
