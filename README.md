@@ -52,7 +52,7 @@ python -m clearline.parity
    python -m clearline.adapters.jira_batch
    ```
 
-   This fetches all issues from the **MRDN** project (with changelog expanded), transforms each into a `WorkItem`, generates a parity report, writes `reports/meridian_parity.json`, and prints a human-readable summary to stdout.
+   This fetches all issues from the **MRDN** project (with changelog expanded) via `POST /rest/api/3/search/jql`, transforms each into a `WorkItem`, generates a parity report, writes `reports/meridian_parity.json`, and prints a human-readable summary to stdout.
 
 ## Ontology
 
@@ -74,6 +74,8 @@ Adapters translate raw source-system payloads into canonical `WorkItem` objects.
 |---|---|
 | Jira | `jira_issue_to_work_item(issue: dict) -> WorkItem` |
 | Jira batch | `python -m clearline.adapters.jira_batch` |
+
+The Jira adapter derives `started_at` from the first changelog transition into `IN_PROGRESS`. Items that never entered that state receive `started_at: null` with confidence `missing`.
 
 ## Parity validation
 

@@ -23,12 +23,21 @@ from clearline.adapters.jira import (
 from clearline.parity import generate_parity_report
 
 JIRA_BASE_URL = "https://imuasystems.atlassian.net"
-SEARCH_PATH = "/rest/api/3/search"
+SEARCH_PATH = "/rest/api/3/search/jql"
 JQL = "project=MRDN ORDER BY created ASC"
-FIELDS = (
-    "summary,issuetype,status,priority,assignee,created,updated,labels,"
-    "parent,customfield_10020,resolutiondate"
-)
+FIELDS = [
+    "summary",
+    "issuetype",
+    "status",
+    "priority",
+    "assignee",
+    "created",
+    "updated",
+    "labels",
+    "parent",
+    "customfield_10020",
+    "resolutiondate",
+]
 MAX_RESULTS = 50
 REPORT_PATH = Path("reports/meridian_parity.json")
 
@@ -48,28 +57,29 @@ def _get_credentials() -> tuple[str, str]:
 
 def fetch_meridian_issues(client: httpx.Client) -> list[dict]:
     issues: list[dict] = []
-    start_at = 0
+    next_page_token: str | None = None
 
     while True:
-        response = client.get(
-            SEARCH_PATH,
-            params={
-                "jql": JQL,
-                "expand": "changelog",
-                "fields": FIELDS,
-                "maxResults": MAX_RESULTS,
-                "startAt": start_at,
-            },
-        )
+        body: dict = {
+            "jql": JQL,
+            "expand": "changelog",
+            "fields": FIELDS,
+            "maxResults": MAX_RESULTS,
+        }
+        if next_page_token:
+            body["nextPageToken"] = next_page_token
+
+        response = client.post(SEARCH_PATH, json=body)
         response.raise_for_status()
         data = response.json()
 
         page = data.get("issues", [])
         issues.extend(page)
 
-        total = data.get("total", 0)
-        start_at += len(page)
-        if start_at >= total or not page:
+        if data.get("isLast", True) or not page:
+            break
+        next_page_token = data.get("nextPageToken")
+        if not next_page_token:
             break
 
     return issues

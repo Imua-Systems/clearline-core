@@ -184,7 +184,9 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
         "state_history": state_history_confidence,
         "touch_count": ConfidenceLevel.INFERRED,
         "age_in_state_days": ConfidenceLevel.INFERRED,
-        "started_at": ConfidenceLevel.INFERRED,
+        "started_at": (
+            ConfidenceLevel.INFERRED if started_at else ConfidenceLevel.MISSING
+        ),
         "assignee": ConfidenceLevel.EXPLICIT if assignee else ConfidenceLevel.MISSING,
         "priority": ConfidenceLevel.EXPLICIT if priority else ConfidenceLevel.MISSING,
         "sprint_id": (
