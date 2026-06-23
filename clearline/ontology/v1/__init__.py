@@ -6,6 +6,7 @@ from .core import (
     StateTransition,
     WorkItem,
 )
+from clearline.adapters.jira import jira_issue_to_work_item, mapped_issue_to_work_item
 from .mapping import FieldMapping, MappingSet
 from .reliability import (
     ReliabilityBand,
@@ -27,4 +28,6 @@ __all__ = [
     "FailureModeDiagnostic",
     "ReliabilityBand",
     "reliability_band",
+    "jira_issue_to_work_item",
+    "mapped_issue_to_work_item",
 ]

@@ -225,6 +225,77 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
     )
 
 
+def _mapped_is_blocked(issue: dict) -> bool | None:
+    labels = issue.get("labels", [])
+    if any(label.lower() == "blocker" for label in labels):
+        return True
+    blocked = issue.get("blocked", False)
+    return True if blocked else None
+
+
+def mapped_issue_to_work_item(issue: dict) -> WorkItem:
+    """Transform a flattened jira_client._map_issue() dict into a WorkItem."""
+    status_name = issue.get("status", "")
+    state = _map_status(status_name)
+    state_confidence = (
+        ConfidenceLevel.EXPLICIT
+        if status_name in JIRA_STATUS_MAP
+        else ConfidenceLevel.INFERRED
+    )
+
+    labels = issue.get("labels", [])
+    assignee = issue.get("assignee")
+    priority = issue.get("priority")
+    sprint_id = issue.get("sprint")
+    epic_key = issue.get("epic_key")
+    epic_name = issue.get("epic_name")
+    parent_id = epic_key or epic_name
+
+    if epic_key:
+        parent_confidence = ConfidenceLevel.EXPLICIT
+    elif epic_name:
+        parent_confidence = ConfidenceLevel.INFERRED
+    else:
+        parent_confidence = ConfidenceLevel.MISSING
+
+    field_confidence: dict[str, ConfidenceLevel] = {
+        "state": state_confidence,
+        "state_history": ConfidenceLevel.MISSING,
+        "touch_count": ConfidenceLevel.MISSING,
+        "age_in_state_days": ConfidenceLevel.MISSING,
+        "started_at": ConfidenceLevel.MISSING,
+        "state_changed_at": ConfidenceLevel.INFERRED,
+        "assignee": ConfidenceLevel.EXPLICIT if assignee else ConfidenceLevel.MISSING,
+        "priority": ConfidenceLevel.EXPLICIT if priority else ConfidenceLevel.MISSING,
+        "sprint_id": ConfidenceLevel.EXPLICIT if sprint_id else ConfidenceLevel.MISSING,
+        "is_blocked": ConfidenceLevel.INFERRED,
+        "parent_id": parent_confidence,
+    }
+
+    return WorkItem(
+        id=issue["key"],
+        source_system="jira",
+        source_url=f"https://imuasystems.atlassian.net/browse/{issue['key']}",
+        item_type=issue.get("issue_type"),
+        title=issue.get("summary"),
+        labels=labels,
+        state=state,
+        state_changed_at=issue.get("updated"),
+        state_history=[],
+        priority=priority,
+        assignee=assignee,
+        created_at=issue["created"],
+        started_at=None,
+        completed_at=issue.get("resolved"),
+        parent_id=parent_id,
+        sprint_id=sprint_id,
+        is_blocked=_mapped_is_blocked(issue),
+        age_in_state_days=None,
+        touch_count=None,
+        field_confidence=field_confidence,
+    )
+
+
 MRDN_25_SAMPLE = {
     "key": "MRDN-25",
     "changelog": {
