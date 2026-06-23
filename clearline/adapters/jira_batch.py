@@ -113,13 +113,10 @@ def print_summary(report: dict) -> None:
         f"Items with no history: {report['items_with_no_history']}",
         "",
         "Field Coverage:",
-        _field_line("state", field_coverage.get("state", {})),
-        _field_line("assignee", field_coverage.get("assignee", {})),
-        _field_line("priority", field_coverage.get("priority", {})),
-        _field_line("sprint_id", field_coverage.get("sprint_id", {})),
-        _field_line("is_blocked", field_coverage.get("is_blocked", {})),
-        _field_line("touch_count", field_coverage.get("touch_count", {})),
-        _field_line("state_history", field_coverage.get("state_history", {})),
+        *[
+            _field_line(name, field_coverage[name])
+            for name in sorted(field_coverage)
+        ],
         "",
         f"Touch Count:  min={touch['min']:.0f} max={touch['max']:.0f} "
         f"mean={touch['mean']:.1f} median={touch['median']:.1f}",

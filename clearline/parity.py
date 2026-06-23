@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import statistics
-from collections import Counter, defaultdict
+from collections import Counter
 
 from clearline.ontology.v1.core import (
     ONTOLOGY_VERSION,
@@ -44,9 +44,14 @@ def generate_parity_report(
     items: list[WorkItem],
     adapter_meta: dict | None = None,
 ) -> dict:
-    field_coverage: dict[str, dict[str, int]] = defaultdict(
-        lambda: {"explicit": 0, "inferred": 0, "missing": 0, "contradicted": 0}
-    )
+    all_fields: set[str] = set()
+    for item in items:
+        all_fields.update(item.field_confidence.keys())
+
+    field_coverage: dict[str, dict[str, int]] = {
+        field: {"explicit": 0, "inferred": 0, "missing": 0, "contradicted": 0}
+        for field in all_fields
+    }
 
     state_distribution = {state.value: 0 for state in CanonicalState}
     touch_counts: list[float] = []
