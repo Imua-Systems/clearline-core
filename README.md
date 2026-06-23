@@ -15,11 +15,14 @@ reports/           Generated parity reports (gitignored)
 ## Requirements
 
 - Python 3.11+
-- `pydantic`, `httpx`, `python-dotenv`
+
+Install the package with dev dependencies:
 
 ```bash
-pip install pydantic httpx python-dotenv
+pip install -e ".[dev]"
 ```
+
+Runtime dependencies (`pydantic`, `httpx`, `python-dotenv`) are installed automatically.
 
 ## Quick start
 
@@ -89,3 +92,13 @@ The Jira adapter derives `started_at` from the first changelog transition into `
 | `JIRA_API_TOKEN` | Atlassian API token |
 
 Never commit `.env` — use `.env.example` as a template.
+
+## Testing
+
+Run the ontology test suite with coverage:
+
+```bash
+python -m pytest tests/ -v --cov=clearline.ontology --cov-report=term-missing
+```
+
+Tests cover `WorkItem`, `StateTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, and `FailureModeDiagnostic`.
