@@ -6,6 +6,8 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- **ADO adapter** (`clearline/adapters/ado.py`) — transforms raw Azure DevOps work item API responses (with revision history) into canonical `WorkItem` objects; exports `ADO_STATE_MAP` and `ado_work_item_to_work_item` from `clearline.ontology.v1`
+- **ADO validation script** (`scripts/validate_ado_adapter.py`) — fetches all work items from Meridian Engineering, loads revisions, runs the adapter, and prints field coverage plus unmapped states
 - **Ontology test suite** (`tests/test_ontology.py`) — pytest coverage for core models, mapping governance, and diagnostic reliability scoring (IMUA-37)
 
 ### Fixed
