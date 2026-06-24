@@ -8,6 +8,7 @@ This is the only module that references ADO-specific concepts.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 from clearline.ontology.v1.core import (
@@ -16,6 +17,8 @@ from clearline.ontology.v1.core import (
     StateTransition,
     WorkItem,
 )
+
+logger = logging.getLogger(__name__)
 
 ADO_STATE_MAP: dict[str, CanonicalState] = {
     "New": CanonicalState.BACKLOG,
@@ -61,10 +64,15 @@ def _extract_parent_id(item: dict) -> str | None:
     return None
 
 
+def _revision_timestamp(revision: dict) -> str | None:
+    fields = revision.get("fields") or {}
+    return revision.get("revisedDate") or fields.get("System.ChangedDate")
+
+
 def _sorted_revisions(revisions: list[dict] | None) -> list[dict]:
     if not revisions:
         return []
-    return sorted(revisions, key=lambda revision: revision.get("revisedDate", ""))
+    return sorted(revisions, key=lambda revision: _revision_timestamp(revision) or "")
 
 
 def _extract_state_history(
@@ -78,46 +86,73 @@ def _extract_state_history(
     prev_state: str | None = None
 
     for revision in _sorted_revisions(revisions):
-        fields = revision.get("fields", {})
-        current_state = fields.get("System.State")
-        if current_state is None:
-            continue
+        try:
+            fields = revision.get("fields", {})
+            current_state = fields.get("System.State")
+            if current_state is None:
+                continue
 
-        if prev_state is not None and current_state != prev_state:
-            has_state_changes = True
+            if prev_state is not None and current_state != prev_state:
+                revised_at = _revision_timestamp(revision)
+                if not revised_at:
+                    logger.warning(
+                        "Skipping state transition for revision %s: no timestamp",
+                        revision.get("id", revision.get("rev", "?")),
+                    )
+                    prev_state = current_state
+                    continue
 
-            if prev_state not in ADO_STATE_MAP:
-                UNMAPPED_STATUSES.add(prev_state)
-            if current_state not in ADO_STATE_MAP:
-                UNMAPPED_STATUSES.add(current_state)
+                has_state_changes = True
 
-            changed_by = fields.get("System.ChangedBy")
-            transitioned_by = (
-                changed_by.get("displayName")
-                if isinstance(changed_by, dict)
-                else None
-            )
+                if prev_state not in ADO_STATE_MAP:
+                    UNMAPPED_STATUSES.add(prev_state)
+                if current_state not in ADO_STATE_MAP:
+                    UNMAPPED_STATUSES.add(current_state)
 
-            transitions.append(
-                StateTransition(
-                    from_state=ADO_STATE_MAP.get(prev_state),
-                    to_state=ADO_STATE_MAP.get(current_state, CanonicalState.BACKLOG),
-                    transitioned_at=_parse_datetime(revision["revisedDate"]),
-                    transitioned_by=transitioned_by,
-                    source_status=current_state,
+                changed_by = fields.get("System.ChangedBy")
+                transitioned_by = (
+                    changed_by.get("displayName")
+                    if isinstance(changed_by, dict)
+                    else None
                 )
-            )
 
-        prev_state = current_state
+                transitions.append(
+                    StateTransition(
+                        from_state=ADO_STATE_MAP.get(prev_state),
+                        to_state=ADO_STATE_MAP.get(current_state, CanonicalState.BACKLOG),
+                        transitioned_at=_parse_datetime(revised_at),
+                        transitioned_by=transitioned_by,
+                        source_status=current_state,
+                    )
+                )
+
+            prev_state = current_state
+        except Exception as exc:
+            logger.warning(
+                "Skipping revision %s during state history extraction: %s",
+                revision.get("id", revision.get("rev", "?")),
+                exc,
+            )
+            continue
 
     return transitions, has_state_changes
 
 
 def _derive_started_at(revisions: list[dict] | None) -> datetime | None:
     for revision in _sorted_revisions(revisions):
-        state = revision.get("fields", {}).get("System.State")
-        if state and ADO_STATE_MAP.get(state) == CanonicalState.IN_PROGRESS:
-            return _parse_datetime(revision["revisedDate"])
+        try:
+            state = revision.get("fields", {}).get("System.State")
+            if state and ADO_STATE_MAP.get(state) == CanonicalState.IN_PROGRESS:
+                revised_at = _revision_timestamp(revision)
+                if revised_at:
+                    return _parse_datetime(revised_at)
+        except Exception as exc:
+            logger.warning(
+                "Skipping revision %s during started_at derivation: %s",
+                revision.get("id", revision.get("rev", "?")),
+                exc,
+            )
+            continue
     return None
 
 
