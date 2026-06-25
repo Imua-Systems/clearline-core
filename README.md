@@ -7,7 +7,7 @@ Code-owned foundation for [Clearline](https://imuasystems.com), Imua's delivery 
 ```
 clearline/
   ontology/v1/     Canonical models (WorkItem, StateTransition, ConfidenceLevel, …)
-  adapters/        Source-system adapters (Jira, ADO, Linear, GitLab, GitHub Issues)
+  adapters/        Source-system adapters (Jira, ADO, Linear, GitLab, GitHub Issues, Bitbucket)
   connectors/      Live API connectors and fetch dispatch (SourceConnection)
   parity.py        Tool-agnostic parity report generator
 scripts/           Live adapter validation scripts
@@ -56,6 +56,14 @@ Runs against the built-in Meridian sample and prints the canonical `WorkItem` as
 
 ```bash
 python -m clearline.adapters.github_issues
+```
+
+Runs against the built-in Meridian sample and prints the canonical `WorkItem` as JSON.
+
+### Transform a single Bitbucket issue (offline)
+
+```bash
+python -m clearline.adapters.bitbucket
 ```
 
 Runs against the built-in Meridian sample and prints the canonical `WorkItem` as JSON.
@@ -122,14 +130,24 @@ conn = SourceConnection(
     project_key="owner/repo",
 )
 items = fetch_work_items(conn)
+
+# Bitbucket
+conn = SourceConnection(
+    source_system="bitbucket",
+    base_url="https://api.bitbucket.org/2.0",
+    api_token="your-bitbucket-token",
+    project_key="workspace/repo_slug",
+)
+items = fetch_work_items(conn)
 ```
 
 | Connector | `source_system` | `project_key` format | Default `base_url` |
 |---|---|---|---|
 | GitLab | `gitlab` | Project ID or `group/project` path | `https://gitlab.com` |
 | GitHub Issues | `github_issues` | `owner/repo` | `https://api.github.com` |
+| Bitbucket | `bitbucket` | `workspace/repo_slug` | `https://api.bitbucket.org/2.0` |
 
-GitLab fetches issues updated within `analysis_window_days` (default 90) and loads `resource_state_events` per issue. GitHub fetches all issues (excluding pull requests) and loads issue timeline events per issue.
+GitLab fetches issues updated within `analysis_window_days` (default 90) and loads `resource_state_events` per issue. GitHub fetches all issues (excluding pull requests) and loads issue timeline events per issue. Bitbucket fetches issues updated within the analysis window and loads issue changes per issue; if issues are disabled for the repository, the connector returns an empty list without raising an error.
 
 ## Ontology
 
@@ -157,6 +175,7 @@ Adapters translate raw source-system payloads into canonical `WorkItem` objects.
 | Linear | `linear_issue_to_work_item(issue: dict) -> WorkItem` |
 | GitLab | `gitlab_issue_to_work_item(issue: dict, events: list[dict] \| None) -> WorkItem` |
 | GitHub Issues | `github_issue_to_work_item(issue: dict, events: list[dict] \| None) -> WorkItem` |
+| Bitbucket | `bitbucket_issue_to_work_item(issue: dict, changes: list[dict] \| None) -> WorkItem` |
 
 The Jira adapter derives `started_at` from the first changelog transition into `IN_PROGRESS`. Items that never entered that state receive `started_at: null` with confidence `missing`.
 
@@ -165,6 +184,8 @@ The ADO adapter derives `started_at` from the first revision whose `System.State
 The GitLab adapter builds `state_history` from `resource_state_events` and maps milestone titles to `sprint_id`.
 
 The GitHub Issues adapter builds `state_history` from `closed` and `reopened` timeline events only. Optional fields (milestone, assignee, labels) degrade to `None` without marking confidence as `missing`. Pull requests returned by the issues endpoint are excluded at the connector layer.
+
+The Bitbucket adapter builds `state_history` from issue status changes only. Priority is stored in `labels` (not canonical `priority`); component name is mapped as a label proxy. Optional fields degrade gracefully; if issues are disabled for the repository, the connector returns an empty list.
 
 ## Parity validation
 
@@ -188,4 +209,4 @@ Run the ontology test suite with coverage:
 python -m pytest tests/ -v --cov=clearline.ontology --cov-report=term-missing
 ```
 
-Tests cover `WorkItem`, `StateTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, `FailureModeDiagnostic`, and adapter transforms for GitLab and GitHub Issues.
+Tests cover `WorkItem`, `StateTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, `FailureModeDiagnostic`, and adapter transforms for GitLab, GitHub Issues, and Bitbucket.

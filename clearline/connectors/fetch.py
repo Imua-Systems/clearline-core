@@ -30,4 +30,9 @@ def fetch_work_items(connection: SourceConnection) -> list[WorkItem]:
 
         return fetch_github_issues_work_items(connection)
 
+    if connection.source_system == "bitbucket":
+        from clearline.connectors.bitbucket_connector import fetch_bitbucket_work_items
+
+        return fetch_bitbucket_work_items(connection)
+
     raise ValueError(f"Unsupported source system: {connection.source_system}")

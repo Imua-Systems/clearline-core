@@ -1,8 +1,17 @@
 from datetime import datetime, timezone
 import json
 
+from unittest.mock import MagicMock, patch
+
 import pytest
 
+from clearline.adapters.bitbucket import (
+    BITBUCKET_FULL_SAMPLE,
+    BITBUCKET_FULL_SAMPLE_CHANGES,
+    BITBUCKET_MINIMAL_SAMPLE,
+    BITBUCKET_STATE_MAP,
+    bitbucket_issue_to_work_item,
+)
 from clearline.adapters.github_issues import (
     GITHUB_FULL_SAMPLE,
     GITHUB_FULL_SAMPLE_EVENTS,
@@ -560,6 +569,152 @@ def test_github_field_confidence_populated():
         "completed_at",
         "assignee",
         "sprint_id",
+    }
+    assert set(work_item.field_confidence.keys()) == expected_fields
+    assert all(
+        isinstance(level, ConfidenceLevel)
+        for level in work_item.field_confidence.values()
+    )
+
+
+def test_bitbucket_issue_to_work_item_minimal():
+    work_item = bitbucket_issue_to_work_item(BITBUCKET_MINIMAL_SAMPLE, changes=[])
+
+    assert work_item.id == "25"
+    assert work_item.source_system == "bitbucket"
+    assert work_item.item_type == "bug"
+    assert work_item.title == BITBUCKET_MINIMAL_SAMPLE["title"]
+    assert work_item.labels == []
+    assert work_item.state == CanonicalState.IN_PROGRESS
+    assert work_item.assignee is None
+    assert work_item.sprint_id is None
+    assert work_item.parent_id is None
+    assert work_item.priority is None
+    assert work_item.state_history == []
+    assert work_item.touch_count == 0
+    assert work_item.started_at == work_item.created_at
+    assert work_item.completed_at is None
+    assert work_item.field_confidence["state"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["state_history"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["touch_count"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["started_at"] == ConfidenceLevel.INFERRED
+    assert "assignee" not in work_item.field_confidence
+    assert "sprint_id" not in work_item.field_confidence
+
+
+def test_bitbucket_issue_to_work_item_full():
+    work_item = bitbucket_issue_to_work_item(
+        BITBUCKET_FULL_SAMPLE, BITBUCKET_FULL_SAMPLE_CHANGES
+    )
+
+    assert work_item.id == "25"
+    assert work_item.source_system == "bitbucket"
+    assert work_item.assignee == "Jim Martin"
+    assert work_item.sprint_id == "Sprint 2"
+    assert work_item.labels == ["frontend", "major"]
+    assert work_item.state == CanonicalState.DONE
+    assert work_item.touch_count == 1
+    assert len(work_item.state_history) == 1
+    assert work_item.state_history[0].from_state == CanonicalState.IN_PROGRESS
+    assert work_item.state_history[0].to_state == CanonicalState.DONE
+    assert work_item.started_at == work_item.created_at
+    assert work_item.completed_at is not None
+    assert work_item.field_confidence["state"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["state_history"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["touch_count"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["started_at"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["completed_at"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["assignee"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["sprint_id"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["labels"] == ConfidenceLevel.INFERRED
+
+
+def test_bitbucket_state_map():
+    assert BITBUCKET_STATE_MAP["new"] == CanonicalState.IN_PROGRESS
+    assert BITBUCKET_STATE_MAP["open"] == CanonicalState.IN_PROGRESS
+    assert BITBUCKET_STATE_MAP["resolved"] == CanonicalState.DONE
+    assert BITBUCKET_STATE_MAP["closed"] == CanonicalState.DONE
+    assert BITBUCKET_STATE_MAP["wontfix"] == CanonicalState.DONE
+
+    for raw_state, expected in [
+        ("new", CanonicalState.IN_PROGRESS),
+        ("open", CanonicalState.IN_PROGRESS),
+        ("resolved", CanonicalState.DONE),
+        ("closed", CanonicalState.DONE),
+        ("wontfix", CanonicalState.DONE),
+    ]:
+        item = bitbucket_issue_to_work_item(
+            {**BITBUCKET_MINIMAL_SAMPLE, "state": raw_state},
+            changes=[],
+        )
+        assert item.state == expected
+
+
+def test_bitbucket_graceful_degradation():
+    issue = {
+        "id": 42,
+        "title": "Untriaged issue",
+        "state": "new",
+        "created_on": "2026-06-01T12:00:00Z",
+        "links": {"html": {"href": "https://bitbucket.org/meridian/engineering/issues/42"}},
+    }
+
+    work_item = bitbucket_issue_to_work_item(issue, changes=[])
+
+    assert work_item.labels == []
+    assert work_item.assignee is None
+    assert work_item.sprint_id is None
+    assert work_item.priority is None
+    assert work_item.parent_id is None
+    assert work_item.state_history == []
+    assert work_item.touch_count == 0
+    assert "assignee" not in work_item.field_confidence
+    assert "sprint_id" not in work_item.field_confidence
+
+
+def test_bitbucket_issues_disabled_returns_empty():
+    from clearline.connectors.bitbucket_connector import fetch_bitbucket_work_items
+    from clearline.connectors.fetch import SourceConnection
+
+    connection = SourceConnection(
+        source_system="bitbucket",
+        base_url="https://api.bitbucket.org/2.0",
+        api_token="test-token",
+        project_key="workspace/repo",
+    )
+
+    mock_response = MagicMock()
+    mock_response.status_code = 404
+    mock_response.json.return_value = {"type": "error", "error": {"message": "not found"}}
+
+    mock_client = MagicMock()
+    mock_client.__enter__.return_value = mock_client
+    mock_client.get.return_value = mock_response
+
+    with patch(
+        "clearline.connectors.bitbucket_connector.httpx.Client",
+        return_value=mock_client,
+    ):
+        work_items = fetch_bitbucket_work_items(connection)
+
+    assert work_items == []
+
+
+def test_bitbucket_field_confidence_populated():
+    work_item = bitbucket_issue_to_work_item(
+        BITBUCKET_FULL_SAMPLE, BITBUCKET_FULL_SAMPLE_CHANGES
+    )
+
+    expected_fields = {
+        "state",
+        "state_history",
+        "touch_count",
+        "age_in_state_days",
+        "started_at",
+        "completed_at",
+        "assignee",
+        "sprint_id",
+        "labels",
     }
     assert set(work_item.field_confidence.keys()) == expected_fields
     assert all(

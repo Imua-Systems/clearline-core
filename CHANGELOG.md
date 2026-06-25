@@ -10,10 +10,12 @@ All notable changes to this project are documented here.
 - **GitLab connector** (`clearline/connectors/gitlab_connector.py`) — fetches issues and state events from the GitLab REST API via `SourceConnection`
 - **GitHub Issues adapter** (`clearline/adapters/github_issues.py`) — transforms GitHub issue dicts and timeline events into canonical `WorkItem` objects with graceful degradation for optional fields; exports `GITHUB_STATE_MAP` and `github_issue_to_work_item` from `clearline.ontology.v1` (IMUA-47)
 - **GitHub Issues connector** (`clearline/connectors/github_issues_connector.py`) — fetches issues (excluding pull requests) and timeline events from the GitHub REST API via `SourceConnection`
-- **Connector dispatch** (`clearline/connectors/fetch.py`) — `SourceConnection` model and `fetch_work_items()` routing for `gitlab` and `github_issues`
+- **Bitbucket adapter** (`clearline/adapters/bitbucket.py`) — transforms Bitbucket issue dicts and issue changes into canonical `WorkItem` objects with graceful degradation for optional fields; exports `BITBUCKET_STATE_MAP` and `bitbucket_issue_to_work_item` from `clearline.ontology.v1` (IMUA-48)
+- **Bitbucket connector** (`clearline/connectors/bitbucket_connector.py`) — fetches issues and issue changes from the Bitbucket REST API via `SourceConnection`; returns an empty list when issues are disabled for the repository
+- **Connector dispatch** (`clearline/connectors/fetch.py`) — `SourceConnection` model and `fetch_work_items()` routing for `gitlab`, `github_issues`, and `bitbucket`
 - **ADO adapter** (`clearline/adapters/ado.py`) — transforms raw Azure DevOps work item API responses (with revision history) into canonical `WorkItem` objects; exports `ADO_STATE_MAP` and `ado_work_item_to_work_item` from `clearline.ontology.v1`
 - **ADO validation script** (`scripts/validate_ado_adapter.py`) — fetches all work items from Meridian Engineering, loads revisions, runs the adapter, and prints field coverage plus unmapped states
-- **Ontology test suite** (`tests/test_ontology.py`) — pytest coverage for core models, mapping governance, diagnostic reliability scoring, and GitLab/GitHub adapter transforms (IMUA-37)
+- **Ontology test suite** (`tests/test_ontology.py`) — pytest coverage for core models, mapping governance, diagnostic reliability scoring, and GitLab/GitHub/Bitbucket adapter transforms (IMUA-37)
 
 ### Fixed
 
