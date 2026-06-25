@@ -7,7 +7,8 @@ Code-owned foundation for [Clearline](https://imuasystems.com), Imua's delivery 
 ```
 clearline/
   ontology/v1/     Canonical models (WorkItem, StateTransition, ConfidenceLevel, …)
-  adapters/        Source-system adapters (Jira, ADO)
+  adapters/        Source-system adapters (Jira, ADO, Linear, GitLab, GitHub Issues)
+  connectors/      Live API connectors and fetch dispatch (SourceConnection)
   parity.py        Tool-agnostic parity report generator
 scripts/           Live adapter validation scripts
 reports/           Generated parity reports (gitignored)
@@ -39,6 +40,22 @@ Runs against the built-in MRDN-25 sample and prints the canonical `WorkItem` as 
 
 ```bash
 python -m clearline.adapters.ado
+```
+
+Runs against the built-in Meridian sample and prints the canonical `WorkItem` as JSON.
+
+### Transform a single GitLab issue (offline)
+
+```bash
+python -m clearline.adapters.gitlab
+```
+
+Runs against the built-in Meridian sample and prints the canonical `WorkItem` as JSON.
+
+### Transform a single GitHub issue (offline)
+
+```bash
+python -m clearline.adapters.github_issues
 ```
 
 Runs against the built-in Meridian sample and prints the canonical `WorkItem` as JSON.
@@ -82,6 +99,38 @@ python -m clearline.parity
 
    This fetches all work items from **Meridian Engineering** via WIQL, loads full items and revision history, transforms each through `ado_work_item_to_work_item`, and prints a per-item table, field coverage summary, errors, and any unmapped ADO states.
 
+### Fetch work items via connectors
+
+Connectors fetch live data from source systems and return canonical `WorkItem` lists. Configure a `SourceConnection` and call `fetch_work_items()`:
+
+```python
+from clearline.connectors.fetch import SourceConnection, fetch_work_items
+
+# GitLab
+conn = SourceConnection(
+    source_system="gitlab",
+    api_token="your-gitlab-token",
+    project_key="group/project",
+)
+items = fetch_work_items(conn)
+
+# GitHub Issues
+conn = SourceConnection(
+    source_system="github_issues",
+    base_url="https://api.github.com",
+    api_token="your-github-token",
+    project_key="owner/repo",
+)
+items = fetch_work_items(conn)
+```
+
+| Connector | `source_system` | `project_key` format | Default `base_url` |
+|---|---|---|---|
+| GitLab | `gitlab` | Project ID or `group/project` path | `https://gitlab.com` |
+| GitHub Issues | `github_issues` | `owner/repo` | `https://api.github.com` |
+
+GitLab fetches issues updated within `analysis_window_days` (default 90) and loads `resource_state_events` per issue. GitHub fetches all issues (excluding pull requests) and loads issue timeline events per issue.
+
 ## Ontology
 
 The canonical ontology lives at `clearline/ontology/v1/`:
@@ -105,10 +154,17 @@ Adapters translate raw source-system payloads into canonical `WorkItem` objects.
 | Jira batch | `python -m clearline.adapters.jira_batch` |
 | ADO | `ado_work_item_to_work_item(item: dict, revisions: list[dict] \| None) -> WorkItem` |
 | ADO validate | `python scripts/validate_ado_adapter.py` |
+| Linear | `linear_issue_to_work_item(issue: dict) -> WorkItem` |
+| GitLab | `gitlab_issue_to_work_item(issue: dict, events: list[dict] \| None) -> WorkItem` |
+| GitHub Issues | `github_issue_to_work_item(issue: dict, events: list[dict] \| None) -> WorkItem` |
 
 The Jira adapter derives `started_at` from the first changelog transition into `IN_PROGRESS`. Items that never entered that state receive `started_at: null` with confidence `missing`.
 
 The ADO adapter derives `started_at` from the first revision whose `System.State` maps to `IN_PROGRESS`, and builds `state_history` by comparing `System.State` across consecutive revisions.
+
+The GitLab adapter builds `state_history` from `resource_state_events` and maps milestone titles to `sprint_id`.
+
+The GitHub Issues adapter builds `state_history` from `closed` and `reopened` timeline events only. Optional fields (milestone, assignee, labels) degrade to `None` without marking confidence as `missing`. Pull requests returned by the issues endpoint are excluded at the connector layer.
 
 ## Parity validation
 
@@ -132,4 +188,4 @@ Run the ontology test suite with coverage:
 python -m pytest tests/ -v --cov=clearline.ontology --cov-report=term-missing
 ```
 
-Tests cover `WorkItem`, `StateTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, and `FailureModeDiagnostic`.
+Tests cover `WorkItem`, `StateTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, `FailureModeDiagnostic`, and adapter transforms for GitLab and GitHub Issues.

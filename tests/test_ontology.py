@@ -3,6 +3,21 @@ import json
 
 import pytest
 
+from clearline.adapters.github_issues import (
+    GITHUB_FULL_SAMPLE,
+    GITHUB_FULL_SAMPLE_EVENTS,
+    GITHUB_MINIMAL_SAMPLE,
+    GITHUB_STATE_MAP,
+    github_issue_to_work_item,
+    is_github_issue,
+)
+from clearline.adapters.gitlab import (
+    GITLAB_FULL_SAMPLE,
+    GITLAB_FULL_SAMPLE_EVENTS,
+    GITLAB_MINIMAL_SAMPLE,
+    GITLAB_STATE_MAP,
+    gitlab_issue_to_work_item,
+)
 from clearline.ontology.v1 import (
     CanonicalState,
     ConfidenceLevel,
@@ -350,6 +365,207 @@ def test_failure_mode_diagnostic_full():
     assert len(diagnostic.assumptions) == 1
     assert len(diagnostic.recommended_next_observation) == 1
     assert diagnostic.ontology_version == "clearline-ontology-v1.0"
+
+
+def test_gitlab_issue_to_work_item_minimal():
+    work_item = gitlab_issue_to_work_item(GITLAB_MINIMAL_SAMPLE)
+
+    assert work_item.id == "25"
+    assert work_item.source_system == "gitlab"
+    assert work_item.item_type == "issue"
+    assert work_item.title == GITLAB_MINIMAL_SAMPLE["title"]
+    assert work_item.labels == ["bug-reduction"]
+    assert work_item.state == CanonicalState.IN_PROGRESS
+    assert work_item.state_history == []
+    assert work_item.touch_count is None
+    assert work_item.started_at is None
+    assert work_item.completed_at is None
+    assert work_item.field_confidence["state"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["state_history"] == ConfidenceLevel.MISSING
+    assert work_item.field_confidence["touch_count"] == ConfidenceLevel.MISSING
+    assert work_item.field_confidence["started_at"] == ConfidenceLevel.MISSING
+    assert work_item.field_confidence["completed_at"] == ConfidenceLevel.MISSING
+
+
+def test_gitlab_issue_to_work_item_full():
+    work_item = gitlab_issue_to_work_item(GITLAB_FULL_SAMPLE, GITLAB_FULL_SAMPLE_EVENTS)
+
+    assert work_item.id == "25"
+    assert work_item.source_system == "gitlab"
+    assert work_item.assignee == "jim.martin"
+    assert work_item.sprint_id == "Sprint 2"
+    assert work_item.is_blocked is True
+    assert work_item.state == CanonicalState.DONE
+    assert work_item.touch_count == 2
+    assert len(work_item.state_history) == 1
+    assert work_item.state_history[0].from_state == CanonicalState.IN_PROGRESS
+    assert work_item.state_history[0].to_state == CanonicalState.DONE
+    assert work_item.started_at is not None
+    assert work_item.completed_at is not None
+    assert work_item.field_confidence["state"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["state_history"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["touch_count"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["started_at"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["completed_at"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["assignee"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["sprint_id"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["is_blocked"] == ConfidenceLevel.INFERRED
+
+
+def test_gitlab_state_map_opened_and_closed():
+    assert GITLAB_STATE_MAP["opened"] == CanonicalState.IN_PROGRESS
+    assert GITLAB_STATE_MAP["closed"] == CanonicalState.DONE
+
+    opened_item = gitlab_issue_to_work_item(
+        {**GITLAB_MINIMAL_SAMPLE, "state": "opened"},
+        events=None,
+    )
+    closed_item = gitlab_issue_to_work_item(
+        {**GITLAB_MINIMAL_SAMPLE, "state": "closed"},
+        events=None,
+    )
+
+    assert opened_item.state == CanonicalState.IN_PROGRESS
+    assert closed_item.state == CanonicalState.DONE
+
+
+def test_gitlab_field_confidence_populated():
+    work_item = gitlab_issue_to_work_item(GITLAB_FULL_SAMPLE, GITLAB_FULL_SAMPLE_EVENTS)
+
+    expected_fields = {
+        "state",
+        "state_history",
+        "touch_count",
+        "age_in_state_days",
+        "started_at",
+        "completed_at",
+        "assignee",
+        "sprint_id",
+        "is_blocked",
+    }
+    assert set(work_item.field_confidence.keys()) == expected_fields
+    assert all(
+        isinstance(level, ConfidenceLevel)
+        for level in work_item.field_confidence.values()
+    )
+
+
+def test_github_issue_to_work_item_minimal():
+    work_item = github_issue_to_work_item(GITHUB_MINIMAL_SAMPLE, events=[])
+
+    assert work_item.id == "25"
+    assert work_item.source_system == "github_issues"
+    assert work_item.item_type == "issue"
+    assert work_item.title == GITHUB_MINIMAL_SAMPLE["title"]
+    assert work_item.labels == []
+    assert work_item.state == CanonicalState.IN_PROGRESS
+    assert work_item.assignee is None
+    assert work_item.sprint_id is None
+    assert work_item.priority is None
+    assert work_item.parent_id is None
+    assert work_item.state_history == []
+    assert work_item.touch_count == 0
+    assert work_item.started_at == work_item.created_at
+    assert work_item.completed_at is None
+    assert work_item.field_confidence["state"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["state_history"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["touch_count"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["started_at"] == ConfidenceLevel.INFERRED
+    assert "assignee" not in work_item.field_confidence
+    assert "sprint_id" not in work_item.field_confidence
+
+
+def test_github_issue_to_work_item_full():
+    work_item = github_issue_to_work_item(GITHUB_FULL_SAMPLE, GITHUB_FULL_SAMPLE_EVENTS)
+
+    assert work_item.id == "25"
+    assert work_item.source_system == "github_issues"
+    assert work_item.assignee == "jim-martin"
+    assert work_item.sprint_id == "Sprint 2"
+    assert work_item.labels == ["bug-reduction", "frontend"]
+    assert work_item.state == CanonicalState.DONE
+    assert work_item.touch_count == 1
+    assert len(work_item.state_history) == 1
+    assert work_item.state_history[0].from_state == CanonicalState.IN_PROGRESS
+    assert work_item.state_history[0].to_state == CanonicalState.DONE
+    assert work_item.started_at == work_item.created_at
+    assert work_item.completed_at is not None
+    assert work_item.field_confidence["state"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["state_history"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["touch_count"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["started_at"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["completed_at"] == ConfidenceLevel.INFERRED
+    assert work_item.field_confidence["assignee"] == ConfidenceLevel.EXPLICIT
+    assert work_item.field_confidence["sprint_id"] == ConfidenceLevel.INFERRED
+
+
+def test_github_state_map_open_and_closed():
+    assert GITHUB_STATE_MAP["open"] == CanonicalState.IN_PROGRESS
+    assert GITHUB_STATE_MAP["closed"] == CanonicalState.DONE
+
+    open_item = github_issue_to_work_item(
+        {**GITHUB_MINIMAL_SAMPLE, "state": "open"},
+        events=[],
+    )
+    closed_item = github_issue_to_work_item(
+        {**GITHUB_MINIMAL_SAMPLE, "state": "closed"},
+        events=[],
+    )
+
+    assert open_item.state == CanonicalState.IN_PROGRESS
+    assert closed_item.state == CanonicalState.DONE
+
+
+def test_github_pull_request_filtering():
+    pull_request = {
+        **GITHUB_MINIMAL_SAMPLE,
+        "pull_request": {"url": "https://api.github.com/repos/meridian/engineering/pulls/25"},
+    }
+
+    assert is_github_issue(GITHUB_MINIMAL_SAMPLE) is True
+    assert is_github_issue(pull_request) is False
+
+
+def test_github_graceful_degradation():
+    issue = {
+        "number": 42,
+        "title": "Untriaged issue",
+        "state": "open",
+        "created_at": "2026-06-01T12:00:00Z",
+        "html_url": "https://github.com/meridian/engineering/issues/42",
+    }
+
+    work_item = github_issue_to_work_item(issue, events=[])
+
+    assert work_item.labels == []
+    assert work_item.assignee is None
+    assert work_item.sprint_id is None
+    assert work_item.priority is None
+    assert work_item.parent_id is None
+    assert work_item.state_history == []
+    assert work_item.touch_count == 0
+    assert "assignee" not in work_item.field_confidence
+    assert "sprint_id" not in work_item.field_confidence
+
+
+def test_github_field_confidence_populated():
+    work_item = github_issue_to_work_item(GITHUB_FULL_SAMPLE, GITHUB_FULL_SAMPLE_EVENTS)
+
+    expected_fields = {
+        "state",
+        "state_history",
+        "touch_count",
+        "age_in_state_days",
+        "started_at",
+        "completed_at",
+        "assignee",
+        "sprint_id",
+    }
+    assert set(work_item.field_confidence.keys()) == expected_fields
+    assert all(
+        isinstance(level, ConfidenceLevel)
+        for level in work_item.field_confidence.values()
+    )
 
 
 def test_json_schema_export(tmp_path):
