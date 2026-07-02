@@ -72,6 +72,7 @@ def test_work_item_minimal():
     assert item.labels == []
     assert item.state_history == []
     assert item.sprint_history == []
+    assert item.priority_history == []
     assert item.field_confidence == {}
     assert item.touch_count is None
     assert item.assignee is None

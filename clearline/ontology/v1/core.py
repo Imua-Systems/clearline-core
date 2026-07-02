@@ -62,6 +62,13 @@ class SprintTransition(BaseModel):
     transitioned_by: Optional[str] = None
 
 
+class PriorityTransition(BaseModel):
+    from_priority: Optional[str] = None  # Jira fromString priority label
+    to_priority: Optional[str] = None  # Jira toString priority label
+    transitioned_at: datetime
+    transitioned_by: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Canonical Work Item
 # ---------------------------------------------------------------------------
@@ -83,6 +90,7 @@ class WorkItem(BaseModel):
     state_changed_at: Optional[datetime] = None
     state_history: list[StateTransition] = Field(default_factory=list)
     sprint_history: list[SprintTransition] = Field(default_factory=list)
+    priority_history: list[PriorityTransition] = Field(default_factory=list)
 
     # Priority and ownership
     priority: Optional[str] = None
