@@ -3,6 +3,7 @@ from .core import (
     CanonicalState,
     ConfidenceLevel,
     MappingStatus,
+    SprintTransition,
     StateTransition,
     WorkItem,
 )
@@ -28,6 +29,7 @@ __all__ = [
     "CanonicalState",
     "ConfidenceLevel",
     "MappingStatus",
+    "SprintTransition",
     "StateTransition",
     "WorkItem",
     "FieldMapping",

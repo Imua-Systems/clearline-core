@@ -19,7 +19,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from clearline.ontology.v1.core import ONTOLOGY_VERSION, StateTransition, WorkItem
+from clearline.ontology.v1.core import ONTOLOGY_VERSION, SprintTransition, StateTransition, WorkItem
 from clearline.ontology.v1.mapping import FieldMapping, MappingSet
 from clearline.ontology.v1.reliability import DiagnosticReliability, FailureModeDiagnostic
 
@@ -29,6 +29,7 @@ DEFAULT_DISPLAY_DIR = "clearline/ontology/v1/schema/"
 SCHEMA_EXPORTS: list[tuple[type, str]] = [
     (WorkItem, "work_item.json"),
     (StateTransition, "state_transition.json"),
+    (SprintTransition, "sprint_transition.json"),
     (FieldMapping, "field_mapping.json"),
     (MappingSet, "mapping_set.json"),
     (DiagnosticReliability, "diagnostic_reliability.json"),

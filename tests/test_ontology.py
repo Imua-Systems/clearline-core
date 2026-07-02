@@ -71,6 +71,7 @@ def test_work_item_minimal():
     assert item.state == CanonicalState.BACKLOG
     assert item.labels == []
     assert item.state_history == []
+    assert item.sprint_history == []
     assert item.field_confidence == {}
     assert item.touch_count is None
     assert item.assignee is None
@@ -724,7 +725,7 @@ def test_bitbucket_field_confidence_populated():
 
 
 def test_json_schema_export(tmp_path):
-    """Schema export produces valid JSON files for all six models."""
+    """Schema export produces valid JSON files for all seven models."""
     from clearline.ontology.v1.export import export_schemas
 
     export_schemas(out_dir=tmp_path)
@@ -732,6 +733,7 @@ def test_json_schema_export(tmp_path):
     expected_files = [
         "work_item.json",
         "state_transition.json",
+        "sprint_transition.json",
         "field_mapping.json",
         "mapping_set.json",
         "diagnostic_reliability.json",

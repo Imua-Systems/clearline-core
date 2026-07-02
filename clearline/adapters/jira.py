@@ -13,6 +13,7 @@ from datetime import datetime
 from clearline.ontology.v1.core import (
     CanonicalState,
     ConfidenceLevel,
+    SprintTransition,
     StateTransition,
     WorkItem,
 )
@@ -145,6 +146,55 @@ def _extract_state_history(changelog: dict | None) -> list[StateTransition]:
     return transitions
 
 
+def _normalize_sprint_changelog_label(value: str | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return str(value)
+    stripped = value.strip()
+    return stripped if stripped else None
+
+
+def _changelog_author_name(history: dict) -> str | None:
+    author = history.get("author") or {}
+    return author.get("displayName") or author.get("accountId")
+
+
+def _extract_sprint_history(changelog: dict | None) -> list[SprintTransition]:
+    if not changelog:
+        return []
+
+    transitions: list[SprintTransition] = []
+
+    for history in changelog.get("histories", []):
+        has_sprint = any(
+            item.get("field") == "Sprint" for item in history.get("items", [])
+        )
+        if not has_sprint:
+            continue
+
+        transitioned_at = _parse_datetime(history["created"])
+        transitioned_by = _changelog_author_name(history)
+
+        for item in history.get("items", []):
+            if item.get("field") != "Sprint":
+                continue
+
+            transitions.append(
+                SprintTransition(
+                    from_sprint=_normalize_sprint_changelog_label(
+                        item.get("fromString")
+                    ),
+                    to_sprint=_normalize_sprint_changelog_label(item.get("toString")),
+                    transitioned_at=transitioned_at,
+                    transitioned_by=transitioned_by,
+                )
+            )
+
+    transitions.sort(key=lambda t: t.transitioned_at)
+    return transitions
+
+
 def _collect_changelog_observations(changelog: dict | None) -> tuple[int, bool]:
     """Return touch_count and whether any status entries exist."""
     if not changelog:
@@ -170,6 +220,7 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
 
     touch_count, has_status_entries = _collect_changelog_observations(changelog)
     state_history = _extract_state_history(changelog)
+    sprint_history = _extract_sprint_history(changelog)
 
     status_name = fields["status"]["name"]
     state = _map_status(status_name)
@@ -185,6 +236,13 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
         state_history_confidence = ConfidenceLevel.EXPLICIT
     else:
         state_history_confidence = ConfidenceLevel.INFERRED
+
+    if changelog is None:
+        sprint_history_confidence = ConfidenceLevel.MISSING
+    elif sprint_history:
+        sprint_history_confidence = ConfidenceLevel.EXPLICIT
+    else:
+        sprint_history_confidence = ConfidenceLevel.MISSING
 
     state_changed_at: datetime | None = None
     if state_history:
@@ -221,6 +279,7 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
     field_confidence: dict[str, ConfidenceLevel] = {
         "state": state_confidence,
         "state_history": state_history_confidence,
+        "sprint_history": sprint_history_confidence,
         "touch_count": ConfidenceLevel.INFERRED,
         "age_in_state_days": ConfidenceLevel.INFERRED,
         "started_at": (
@@ -246,6 +305,7 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
         state=state,
         state_changed_at=state_changed_at,
         state_history=state_history,
+        sprint_history=sprint_history,
         priority=priority,
         assignee=assignee,
         created_at=_parse_datetime(fields["created"]),
@@ -300,6 +360,7 @@ def mapped_issue_to_work_item(issue: dict) -> WorkItem:
     field_confidence: dict[str, ConfidenceLevel] = {
         "state": state_confidence,
         "state_history": ConfidenceLevel.MISSING,
+        "sprint_history": ConfidenceLevel.MISSING,
         "touch_count": ConfidenceLevel.MISSING,
         "age_in_state_days": ConfidenceLevel.MISSING,
         "started_at": ConfidenceLevel.MISSING,

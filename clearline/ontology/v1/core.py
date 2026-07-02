@@ -55,6 +55,13 @@ class StateTransition(BaseModel):
     source_status: Optional[str] = None  # raw status label from source system
 
 
+class SprintTransition(BaseModel):
+    from_sprint: Optional[str] = None  # Jira fromString sprint name/label
+    to_sprint: Optional[str] = None  # Jira toString sprint name/label
+    transitioned_at: datetime
+    transitioned_by: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Canonical Work Item
 # ---------------------------------------------------------------------------
@@ -75,6 +82,7 @@ class WorkItem(BaseModel):
     state: CanonicalState
     state_changed_at: Optional[datetime] = None
     state_history: list[StateTransition] = Field(default_factory=list)
+    sprint_history: list[SprintTransition] = Field(default_factory=list)
 
     # Priority and ownership
     priority: Optional[str] = None
