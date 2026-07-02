@@ -14,7 +14,7 @@ Organizational diagnostics are inference, not measurement.
 """
 
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -30,6 +30,28 @@ def reliability_band(score: float) -> ReliabilityBand:
     elif score >= 0.55:
         return ReliabilityBand.MODERATE
     return ReliabilityBand.LOW
+
+
+# ---------------------------------------------------------------------------
+# Diagnostic narrative
+# ---------------------------------------------------------------------------
+
+class Signal(BaseModel):
+    """Structured observation supporting a failure-mode diagnostic."""
+
+    type: str
+    description: str
+    severity: Literal["low", "medium", "high"]
+    affected_items: list[str] = Field(default_factory=list)
+
+
+class Finding(BaseModel):
+    """Human-readable diagnostic interpretation with confidence metadata."""
+
+    summary: str
+    detail: str
+    confidence: Literal["High", "Medium", "Low"]
+    confidence_reason: str
 
 
 class DiagnosticReliability(BaseModel):

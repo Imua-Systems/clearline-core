@@ -726,7 +726,7 @@ def test_bitbucket_field_confidence_populated():
 
 
 def test_json_schema_export(tmp_path):
-    """Schema export produces valid JSON files for all seven models."""
+    """Schema export produces valid JSON files for all ontology models."""
     from clearline.ontology.v1.export import export_schemas
 
     export_schemas(out_dir=tmp_path)
@@ -739,6 +739,8 @@ def test_json_schema_export(tmp_path):
         "mapping_set.json",
         "diagnostic_reliability.json",
         "failure_mode_diagnostic.json",
+        "signal.json",
+        "finding.json",
     ]
     for filename in expected_files:
         path = tmp_path / filename

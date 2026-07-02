@@ -22,6 +22,8 @@ from .reliability import (
     ReliabilityBand,
     DiagnosticReliability,
     FailureModeDiagnostic,
+    Finding,
+    Signal,
     reliability_band,
 )
 
@@ -38,6 +40,8 @@ __all__ = [
     "MappingSet",
     "DiagnosticReliability",
     "FailureModeDiagnostic",
+    "Finding",
+    "Signal",
     "ReliabilityBand",
     "reliability_band",
     "ADO_STATE_MAP",

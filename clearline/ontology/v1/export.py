@@ -27,7 +27,7 @@ from clearline.ontology.v1.core import (
     WorkItem,
 )
 from clearline.ontology.v1.mapping import FieldMapping, MappingSet
-from clearline.ontology.v1.reliability import DiagnosticReliability, FailureModeDiagnostic
+from clearline.ontology.v1.reliability import DiagnosticReliability, FailureModeDiagnostic, Finding, Signal
 
 DEFAULT_SCHEMA_DIR = Path(__file__).parent / "schema"
 DEFAULT_DISPLAY_DIR = "clearline/ontology/v1/schema/"
@@ -41,6 +41,8 @@ SCHEMA_EXPORTS: list[tuple[type, str]] = [
     (MappingSet, "mapping_set.json"),
     (DiagnosticReliability, "diagnostic_reliability.json"),
     (FailureModeDiagnostic, "failure_mode_diagnostic.json"),
+    (Signal, "signal.json"),
+    (Finding, "finding.json"),
 ]
 
 
