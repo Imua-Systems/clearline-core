@@ -48,16 +48,55 @@ def _map_status(status: str | None) -> CanonicalState:
     return CanonicalState.BACKLOG
 
 
-def _extract_sprint_id(fields: dict) -> str | None:
-    sprints = fields.get("customfield_10020")
-    if not sprints:
+def _current_sprint_entry(sprint_field) -> dict | str | None:
+    """Return the sprint entry that best represents the issue's current sprint.
+
+    Jira's sprint custom field is a list of every sprint an issue has been in.
+    List order is not guaranteed, so when entries include ``state`` we prefer the
+    last ``active`` sprint; otherwise we use the last list element (chronological
+    append convention used when issues are moved between sprints).
+    """
+    if not sprint_field:
         return None
-    if isinstance(sprints, list) and sprints:
-        last = sprints[-1]
-        if isinstance(last, dict):
-            return last.get("name")
-        return str(last)
+    if isinstance(sprint_field, dict):
+        return sprint_field
+    if isinstance(sprint_field, str):
+        return sprint_field
+    if not isinstance(sprint_field, list) or not sprint_field:
+        return None
+
+    dict_entries = [entry for entry in sprint_field if isinstance(entry, dict)]
+    if dict_entries:
+        active_entries = [
+            entry for entry in dict_entries if entry.get("state") == "active"
+        ]
+        if active_entries:
+            return active_entries[-1]
+        return dict_entries[-1]
+
+    for entry in reversed(sprint_field):
+        if isinstance(entry, str):
+            return entry
     return None
+
+
+def _extract_sprint_id(fields: dict) -> str | None:
+    entry = _current_sprint_entry(fields.get("customfield_10020"))
+    if entry is None:
+        return None
+    if isinstance(entry, dict):
+        sprint_id = entry.get("id")
+        return str(sprint_id) if sprint_id is not None else None
+    return None
+
+
+def _extract_sprint_name(fields: dict) -> str | None:
+    entry = _current_sprint_entry(fields.get("customfield_10020"))
+    if entry is None:
+        return None
+    if isinstance(entry, dict):
+        return entry.get("name")
+    return str(entry)
 
 
 def _extract_state_history(changelog: dict | None) -> list[StateTransition]:
@@ -176,7 +215,7 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
     parent_obj = fields.get("parent")
     parent_id = parent_obj["key"] if parent_obj else None
 
-    sprint_id = _extract_sprint_id(fields)
+    sprint_id = _extract_sprint_name(fields)
     sprint_raw = fields.get("customfield_10020")
 
     field_confidence: dict[str, ConfidenceLevel] = {
