@@ -91,6 +91,18 @@ python -m clearline.parity
 
    This fetches all issues from the **MRDN** project (with changelog expanded) via `POST /rest/api/3/search/jql`, transforms each into a `WorkItem`, generates a parity report, writes `reports/meridian_parity.json`, and prints a human-readable summary to stdout.
 
+### Probe: Jira rank-based priority history
+
+1. Set Jira credentials in `.env` (same as batch above).
+
+2. Run the probe:
+
+   ```bash
+   python -m scripts.probe_rank_history
+   ```
+
+   Fetches live issues (default: MRDN and IMUA), runs each through `jira_issue_to_work_item`, and reports priority-history transitions split by kind (explicit priority field changes vs. rank/order movement). Use `--issues MRDN-25` to probe specific keys.
+
 ### Validate: ADO Meridian Engineering adapter
 
 1. Set your Azure DevOps PAT in `.env` or the environment:
@@ -155,7 +167,7 @@ The canonical ontology lives at `clearline/ontology/v1/`:
 
 | Module | Purpose |
 |---|---|
-| `core.py` | `WorkItem`, `StateTransition`, `CanonicalState`, `ConfidenceLevel` |
+| `core.py` | `WorkItem`, `StateTransition`, `SprintTransition`, `PriorityTransition`, `PriorityChangeKind`, `CanonicalState`, `ConfidenceLevel` |
 | `mapping.py` | `FieldMapping`, `MappingSet` — agent-assisted field mappings |
 | `reliability.py` | `DiagnosticReliability`, `FailureModeDiagnostic` |
 
@@ -178,6 +190,8 @@ Adapters translate raw source-system payloads into canonical `WorkItem` objects.
 | Bitbucket | `bitbucket_issue_to_work_item(issue: dict, changes: list[dict] \| None) -> WorkItem` |
 
 The Jira adapter derives `started_at` from the first changelog transition into `IN_PROGRESS`. Items that never entered that state receive `started_at: null` with confidence `missing`.
+
+The Jira adapter extracts `priority_history` from changelog entries for both explicit priority field changes (`priority`) and backlog rank/order movement (`Rank` / `customfield_10019`). Each `PriorityTransition` records `change_kind` (`priority` or `rank`) and the raw `source_field` so downstream detectors can distinguish drag-and-drop reprioritization from explicit priority edits.
 
 The ADO adapter derives `started_at` from the first revision whose `System.State` maps to `IN_PROGRESS`, and builds `state_history` by comparing `System.State` across consecutive revisions.
 
@@ -209,4 +223,4 @@ Run the ontology test suite with coverage:
 python -m pytest tests/ -v --cov=clearline.ontology --cov-report=term-missing
 ```
 
-Tests cover `WorkItem`, `StateTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, `FailureModeDiagnostic`, and adapter transforms for GitLab, GitHub Issues, and Bitbucket.
+Tests cover `WorkItem`, `StateTransition`, `PriorityTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, `FailureModeDiagnostic`, and adapter transforms for Jira (including priority and rank changelog history), GitLab, GitHub Issues, and Bitbucket.

@@ -6,6 +6,8 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- **`PriorityChangeKind` enum** (`clearline/ontology/v1/core.py`) — distinguishes explicit priority field changes (`priority`) from backlog rank/order movement (`rank`) on `PriorityTransition`
+- **Rank history probe** (`scripts/probe_rank_history.py`) — fetches live Jira issues and reports priority-history transitions split by `change_kind` (IMUA-102)
 - **GitLab adapter** (`clearline/adapters/gitlab.py`) — transforms GitLab issue dicts and `resource_state_events` into canonical `WorkItem` objects; exports `GITLAB_STATE_MAP` and `gitlab_issue_to_work_item` from `clearline.ontology.v1` (IMUA-46)
 - **GitLab connector** (`clearline/connectors/gitlab_connector.py`) — fetches issues and state events from the GitLab REST API via `SourceConnection`
 - **GitHub Issues adapter** (`clearline/adapters/github_issues.py`) — transforms GitHub issue dicts and timeline events into canonical `WorkItem` objects with graceful degradation for optional fields; exports `GITHUB_STATE_MAP` and `github_issue_to_work_item` from `clearline.ontology.v1` (IMUA-47)
@@ -19,6 +21,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- **Jira adapter** — `_extract_priority_history` now captures backlog drag-and-drop reprioritization emitted as changelog field `Rank` / `customfield_10019`, tagging each transition with `change_kind` and `source_field` so Priority Movement can distinguish rank movement from explicit priority edits; Rank is no longer reported as an unsupported changelog field (IMUA-102)
 - **Jira batch** — migrated from deprecated `GET /rest/api/3/search` to `POST /rest/api/3/search/jql` with `nextPageToken` pagination (Atlassian removed the legacy endpoint)
 - **Jira adapter** — `started_at` confidence is now `MISSING` when no `IN_PROGRESS` state transition exists in changelog history (previously marked `INFERRED` on all items)
 

@@ -43,6 +43,17 @@ class MappingStatus(str, Enum):
     CANONICAL = "canonical"    # promoted by Imua, reusable across clients
 
 
+class PriorityChangeKind(str, Enum):
+    """Distinguishes the kind of prioritization signal in a PriorityTransition.
+
+    Backlog reprioritization surfaces in source systems in two distinct ways.
+    Keeping them separate lets detector logic reason about explicit priority
+    field changes independently from rank/order (drag-and-drop) movement.
+    """
+    PRIORITY = "priority"  # explicit priority field change (e.g. Medium -> High)
+    RANK = "rank"          # backlog rank/order movement (e.g. Jira "Rank")
+
+
 # ---------------------------------------------------------------------------
 # State Transition (for history tracking)
 # ---------------------------------------------------------------------------
@@ -63,10 +74,16 @@ class SprintTransition(BaseModel):
 
 
 class PriorityTransition(BaseModel):
-    from_priority: Optional[str] = None  # Jira fromString priority label
-    to_priority: Optional[str] = None  # Jira toString priority label
+    from_priority: Optional[str] = None  # source fromString label (priority or rank)
+    to_priority: Optional[str] = None  # source toString label (priority or rank)
     transitioned_at: datetime
     transitioned_by: Optional[str] = None
+    # Canonical kind of prioritization signal. Defaults to PRIORITY so existing
+    # priority-field transitions are unchanged for consumers that ignore it.
+    change_kind: PriorityChangeKind = PriorityChangeKind.PRIORITY
+    # Raw source field name that produced this transition (e.g. "priority",
+    # "Rank"). Preserved so detectors can trace back to the origin field.
+    source_field: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------

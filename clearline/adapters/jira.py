@@ -13,11 +13,18 @@ from datetime import datetime
 from clearline.ontology.v1.core import (
     CanonicalState,
     ConfidenceLevel,
+    PriorityChangeKind,
     PriorityTransition,
     SprintTransition,
     StateTransition,
     WorkItem,
 )
+
+# Jira changelog fields that represent prioritization signals. Backlog
+# drag-and-drop reprioritization is emitted as "Rank" / customfield_10019,
+# distinct from explicit "priority" field changes.
+_RANK_CHANGELOG_FIELD_NAMES = {"rank"}
+_RANK_CHANGELOG_FIELD_IDS = {"customfield_10019"}
 
 JIRA_STATUS_MAP: dict[str, CanonicalState] = {
     "To Do": CanonicalState.BACKLOG,
@@ -196,6 +203,27 @@ def _extract_sprint_history(changelog: dict | None) -> list[SprintTransition]:
     return transitions
 
 
+def _priority_change_kind(item: dict) -> PriorityChangeKind | None:
+    """Classify a changelog item as a priority or rank signal.
+
+    Returns the canonical ``PriorityChangeKind`` for prioritization-relevant
+    changelog items, or ``None`` for items that are neither priority nor rank.
+
+    - Explicit priority field changes match Jira field ``priority``.
+    - Backlog rank/order movement matches field ``Rank`` and/or the
+      ``customfield_10019`` field id (Jira emits both for drag-and-drop
+      reprioritization).
+    """
+    field = (item.get("field") or "").lower()
+    field_id = (item.get("fieldId") or "").lower()
+
+    if field == "priority":
+        return PriorityChangeKind.PRIORITY
+    if field in _RANK_CHANGELOG_FIELD_NAMES or field_id in _RANK_CHANGELOG_FIELD_IDS:
+        return PriorityChangeKind.RANK
+    return None
+
+
 def _extract_priority_history(changelog: dict | None) -> list[PriorityTransition]:
     if not changelog:
         return []
@@ -203,20 +231,18 @@ def _extract_priority_history(changelog: dict | None) -> list[PriorityTransition
     transitions: list[PriorityTransition] = []
 
     for history in changelog.get("histories", []):
-        has_priority = any(
-            item.get("field", "").lower() == "priority"
+        matching_items = [
+            (item, kind)
             for item in history.get("items", [])
-        )
-        if not has_priority:
+            if (kind := _priority_change_kind(item)) is not None
+        ]
+        if not matching_items:
             continue
 
         transitioned_at = _parse_datetime(history["created"])
         transitioned_by = _changelog_author_name(history)
 
-        for item in history.get("items", []):
-            if item.get("field", "").lower() != "priority":
-                continue
-
+        for item, kind in matching_items:
             transitions.append(
                 PriorityTransition(
                     from_priority=_normalize_sprint_changelog_label(
@@ -225,6 +251,8 @@ def _extract_priority_history(changelog: dict | None) -> list[PriorityTransition
                     to_priority=_normalize_sprint_changelog_label(item.get("toString")),
                     transitioned_at=transitioned_at,
                     transitioned_by=transitioned_by,
+                    change_kind=kind,
+                    source_field=item.get("field"),
                 )
             )
 
@@ -245,6 +273,9 @@ def _collect_changelog_observations(changelog: dict | None) -> tuple[int, bool]:
             field = item.get("field")
             if field == "status":
                 has_status_entries = True
+            elif _priority_change_kind(item) is not None:
+                # priority and rank changes are consumed by priority history
+                continue
             elif field:
                 UNSUPPORTED_CHANGELOG_FIELDS.add(field)
 
