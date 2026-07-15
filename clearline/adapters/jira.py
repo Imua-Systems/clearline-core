@@ -8,14 +8,16 @@ This is the only module that references Jira-specific concepts.
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 
 from clearline.ontology.v1.core import (
     CanonicalState,
+    ClosedSprintRef,
     ConfidenceLevel,
     EstimateTransition,
     PriorityChangeKind,
     PriorityTransition,
+    Sprint,
     SprintTransition,
     StateTransition,
     WorkItem,
@@ -53,6 +55,17 @@ UNSUPPORTED_CHANGELOG_FIELDS: set[str] = set()
 
 def _parse_datetime(value: str) -> datetime:
     return datetime.fromisoformat(value)
+
+
+def _parse_optional_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    return datetime.fromisoformat(stripped)
 
 
 def _map_status(status: str | None) -> CanonicalState:
@@ -112,6 +125,50 @@ def _extract_sprint_name(fields: dict) -> str | None:
     if isinstance(entry, dict):
         return entry.get("name")
     return str(entry)
+
+
+def jira_sprint_to_sprint(
+    sprint: dict,
+    *,
+    fetched_at: datetime | None = None,
+) -> Sprint:
+    """Normalize a raw Jira sprint dict into the ontology ``Sprint`` model.
+
+    Maps Jira ``startDate`` / ``endDate`` / ``completeDate`` into
+    ``start_date`` / ``end_date`` (planned) / ``complete_date``. Accepts both
+    Agile API sprint payloads and sprint custom-field entries on issues.
+    ``complete_date`` is ``None`` when the source omits ``completeDate``
+    (in-progress sprints or malformed data). ``fetched_at`` is stamped from
+    the caller, or ``datetime.now(timezone.utc)`` when omitted, so the
+    observation moment is always preserved on the adapter path.
+    """
+    sprint_id = sprint.get("id")
+    return Sprint(
+        id=str(sprint_id) if sprint_id is not None else None,
+        name=sprint.get("name") or "",
+        state=sprint.get("state"),
+        start_date=_parse_optional_datetime(sprint.get("startDate")),
+        end_date=_parse_optional_datetime(sprint.get("endDate")),
+        complete_date=_parse_optional_datetime(sprint.get("completeDate")),
+        fetched_at=(
+            fetched_at
+            if fetched_at is not None
+            else datetime.now(timezone.utc)
+        ),
+    )
+
+
+def sprint_to_closed_ref(sprint: Sprint) -> ClosedSprintRef:
+    """Project a ``Sprint`` into a ``ClosedSprintRef`` preserving all six fields."""
+    return ClosedSprintRef(
+        id=sprint.id,
+        name=sprint.name,
+        state=sprint.state or "closed",
+        start_date=sprint.start_date,
+        end_date=sprint.end_date,
+        complete_date=sprint.complete_date,
+        fetched_at=sprint.fetched_at,
+    )
 
 
 def _extract_state_history(changelog: dict | None) -> list[StateTransition]:

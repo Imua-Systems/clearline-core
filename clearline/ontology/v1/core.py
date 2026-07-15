@@ -98,6 +98,64 @@ class EstimateTransition(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Sprint metadata (boundary preservation)
+# ---------------------------------------------------------------------------
+
+class Sprint(BaseModel):
+    """Source sprint metadata preserved at fetch time.
+
+    Distinguishes the mutable planned end date (``end_date`` / Jira ``endDate``)
+    from the source-recorded completion boundary (``complete_date`` / Jira
+    ``completeDate``). ``fetched_at`` records when this snapshot was observed —
+    sprint dates have no source-side history, so a later edit to ``endDate``
+    must not silently rewrite a boundary captured earlier.
+    """
+
+    id: Optional[str] = None
+    name: str
+    state: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None  # planned end (Jira endDate)
+    complete_date: Optional[datetime] = None  # Jira completeDate
+    fetched_at: Optional[datetime] = None
+
+
+class ClosedSprintRef(BaseModel):
+    """Closed-sprint reference carrying full boundary metadata.
+
+    Optional fields default to ``None`` so consumers that only read ``name`` /
+    ``end_date`` (or construct with those alone) remain unchanged.
+    """
+
+    name: str
+    state: str = "closed"
+    id: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None  # planned end (Jira endDate)
+    complete_date: Optional[datetime] = None  # Jira completeDate
+    fetched_at: Optional[datetime] = None
+
+
+class SprintContext(BaseModel):
+    """Sprint boundary metadata supplied for observation windows.
+
+    Backward compatible: existing consumers that only read ``start_date`` /
+    ``end_date`` continue to work. Optional ``id``, ``complete_date``, and
+    ``fetched_at`` preserve the source completion boundary for downstream
+    reconstruction without mutating planned ``end_date``.
+    """
+
+    name: str
+    state: str = "active"
+    id: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None  # planned end (Jira endDate)
+    complete_date: Optional[datetime] = None  # Jira completeDate
+    fetched_at: Optional[datetime] = None
+    closed_sprints: list[ClosedSprintRef] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
 # Canonical Work Item
 # ---------------------------------------------------------------------------
 
