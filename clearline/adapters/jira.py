@@ -13,6 +13,7 @@ from datetime import datetime
 from clearline.ontology.v1.core import (
     CanonicalState,
     ConfidenceLevel,
+    EstimateTransition,
     PriorityChangeKind,
     PriorityTransition,
     SprintTransition,
@@ -25,6 +26,11 @@ from clearline.ontology.v1.core import (
 # distinct from explicit "priority" field changes.
 _RANK_CHANGELOG_FIELD_NAMES = {"rank"}
 _RANK_CHANGELOG_FIELD_IDS = {"customfield_10019"}
+
+# Story Points custom field — current-state estimate and changelog history.
+# Native timeoriginalestimate / timeestimate are out of scope for v1.
+_ESTIMATE_CHANGELOG_FIELD_IDS = {"customfield_10016"}
+_ESTIMATE_CHANGELOG_FIELD_NAMES = {"story points"}
 
 JIRA_STATUS_MAP: dict[str, CanonicalState] = {
     "To Do": CanonicalState.BACKLOG,
@@ -260,6 +266,68 @@ def _extract_priority_history(changelog: dict | None) -> list[PriorityTransition
     return transitions
 
 
+def _parse_estimate_value(value) -> float | None:
+    """Parse a story-points estimate from changelog or field values."""
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return None
+        try:
+            return float(stripped)
+        except ValueError:
+            return None
+    return None
+
+
+def _is_estimate_changelog_item(item: dict) -> bool:
+    """Return True when a changelog item is the Story Points estimate field."""
+    field = (item.get("field") or "").lower()
+    field_id = (item.get("fieldId") or "").lower()
+    return (
+        field_id in _ESTIMATE_CHANGELOG_FIELD_IDS
+        or field in _ESTIMATE_CHANGELOG_FIELD_NAMES
+    )
+
+
+def _extract_estimate_history(changelog: dict | None) -> list[EstimateTransition]:
+    if not changelog:
+        return []
+
+    transitions: list[EstimateTransition] = []
+
+    for history in changelog.get("histories", []):
+        matching_items = [
+            item
+            for item in history.get("items", [])
+            if _is_estimate_changelog_item(item)
+        ]
+        if not matching_items:
+            continue
+
+        transitioned_at = _parse_datetime(history["created"])
+        transitioned_by = _changelog_author_name(history)
+
+        for item in matching_items:
+            transitions.append(
+                EstimateTransition(
+                    from_value=_parse_estimate_value(item.get("fromString")),
+                    to_value=_parse_estimate_value(item.get("toString")),
+                    transitioned_at=transitioned_at,
+                    transitioned_by=transitioned_by,
+                    source_field=item.get("field") or item.get("fieldId"),
+                )
+            )
+
+    transitions.sort(key=lambda t: t.transitioned_at)
+    return transitions
+
+
 def _collect_changelog_observations(changelog: dict | None) -> tuple[int, bool]:
     """Return touch_count and whether any status entries exist."""
     if not changelog:
@@ -276,6 +344,9 @@ def _collect_changelog_observations(changelog: dict | None) -> tuple[int, bool]:
             elif _priority_change_kind(item) is not None:
                 # priority and rank changes are consumed by priority history
                 continue
+            elif _is_estimate_changelog_item(item):
+                # story-point estimate changes are consumed by estimate history
+                continue
             elif field:
                 UNSUPPORTED_CHANGELOG_FIELDS.add(field)
 
@@ -290,6 +361,7 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
     state_history = _extract_state_history(changelog)
     sprint_history = _extract_sprint_history(changelog)
     priority_history = _extract_priority_history(changelog)
+    estimate_history = _extract_estimate_history(changelog)
 
     status_name = fields["status"]["name"]
     state = _map_status(status_name)
@@ -320,6 +392,14 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
     else:
         priority_history_confidence = ConfidenceLevel.MISSING
 
+    # Estimate history: EXPLICIT when changelog was evaluated (including an empty
+    # list = confirmed absence of estimate transitions). MISSING only when the
+    # changelog itself is absent (IMUA-125 / IMUA-135 confirmed-absence pattern).
+    if changelog is None:
+        estimate_history_confidence = ConfidenceLevel.MISSING
+    else:
+        estimate_history_confidence = ConfidenceLevel.EXPLICIT
+
     state_changed_at: datetime | None = None
     if state_history:
         state_changed_at = max(t.transitioned_at for t in state_history)
@@ -346,6 +426,8 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
     priority_obj = fields.get("priority")
     priority = priority_obj["name"] if priority_obj else None
 
+    estimate = _parse_estimate_value(fields.get("customfield_10016"))
+
     parent_obj = fields.get("parent")
     parent_id = parent_obj["key"] if parent_obj else None
 
@@ -357,6 +439,7 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
         "state_history": state_history_confidence,
         "sprint_history": sprint_history_confidence,
         "priority_history": priority_history_confidence,
+        "estimate_history": estimate_history_confidence,
         "touch_count": ConfidenceLevel.INFERRED,
         "age_in_state_days": ConfidenceLevel.INFERRED,
         "started_at": (
@@ -364,6 +447,7 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
         ),
         "assignee": ConfidenceLevel.EXPLICIT if assignee else ConfidenceLevel.MISSING,
         "priority": ConfidenceLevel.EXPLICIT if priority else ConfidenceLevel.MISSING,
+        "estimate": ConfidenceLevel.EXPLICIT if estimate is not None else ConfidenceLevel.MISSING,
         "sprint_id": (
             ConfidenceLevel.EXPLICIT
             if sprint_raw is not None
@@ -384,7 +468,9 @@ def jira_issue_to_work_item(issue: dict) -> WorkItem:
         state_history=state_history,
         sprint_history=sprint_history,
         priority_history=priority_history,
+        estimate_history=estimate_history,
         priority=priority,
+        estimate=estimate,
         assignee=assignee,
         created_at=_parse_datetime(fields["created"]),
         started_at=started_at,
@@ -440,12 +526,14 @@ def mapped_issue_to_work_item(issue: dict) -> WorkItem:
         "state_history": ConfidenceLevel.MISSING,
         "sprint_history": ConfidenceLevel.MISSING,
         "priority_history": ConfidenceLevel.MISSING,
+        "estimate_history": ConfidenceLevel.MISSING,
         "touch_count": ConfidenceLevel.MISSING,
         "age_in_state_days": ConfidenceLevel.MISSING,
         "started_at": ConfidenceLevel.MISSING,
         "state_changed_at": ConfidenceLevel.INFERRED,
         "assignee": ConfidenceLevel.EXPLICIT if assignee else ConfidenceLevel.MISSING,
         "priority": ConfidenceLevel.EXPLICIT if priority else ConfidenceLevel.MISSING,
+        "estimate": ConfidenceLevel.MISSING,
         "sprint_id": ConfidenceLevel.EXPLICIT if sprint_id else ConfidenceLevel.MISSING,
         "is_blocked": ConfidenceLevel.INFERRED,
         "parent_id": parent_confidence,
@@ -555,6 +643,7 @@ MRDN_25_SAMPLE = {
         "labels": ["bug-reduction"],
         "parent": {"key": "MRDN-8"},
         "customfield_10020": None,
+        "customfield_10016": None,
         "resolutiondate": None,
     },
 }

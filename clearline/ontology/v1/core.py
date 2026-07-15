@@ -86,6 +86,17 @@ class PriorityTransition(BaseModel):
     source_field: Optional[str] = None
 
 
+class EstimateTransition(BaseModel):
+    """Timestamped story-point / estimate change from source changelog."""
+
+    from_value: Optional[float] = None
+    to_value: Optional[float] = None
+    transitioned_at: datetime
+    transitioned_by: Optional[str] = None
+    # Raw source field name (e.g. "Story Points") or id when name is absent.
+    source_field: Optional[str] = None
+
+
 # ---------------------------------------------------------------------------
 # Canonical Work Item
 # ---------------------------------------------------------------------------
@@ -108,9 +119,11 @@ class WorkItem(BaseModel):
     state_history: list[StateTransition] = Field(default_factory=list)
     sprint_history: list[SprintTransition] = Field(default_factory=list)
     priority_history: list[PriorityTransition] = Field(default_factory=list)
+    estimate_history: list[EstimateTransition] = Field(default_factory=list)
 
-    # Priority and ownership
+    # Priority, estimate, and ownership
     priority: Optional[str] = None
+    estimate: Optional[float] = None  # current story points / size estimate
     assignee: Optional[str] = None
 
     # Timestamps

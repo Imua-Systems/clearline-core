@@ -73,6 +73,8 @@ def test_work_item_minimal():
     assert item.state_history == []
     assert item.sprint_history == []
     assert item.priority_history == []
+    assert item.estimate_history == []
+    assert item.estimate is None
     assert item.field_confidence == {}
     assert item.touch_count is None
     assert item.assignee is None
@@ -734,6 +736,8 @@ def test_json_schema_export(tmp_path):
     expected_files = [
         "work_item.json",
         "state_transition.json",
+        "priority_transition.json",
+        "estimate_transition.json",
         "sprint_transition.json",
         "field_mapping.json",
         "mapping_set.json",

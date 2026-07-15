@@ -167,7 +167,7 @@ The canonical ontology lives at `clearline/ontology/v1/`:
 
 | Module | Purpose |
 |---|---|
-| `core.py` | `WorkItem`, `StateTransition`, `SprintTransition`, `PriorityTransition`, `PriorityChangeKind`, `CanonicalState`, `ConfidenceLevel` |
+| `core.py` | `WorkItem`, `StateTransition`, `SprintTransition`, `PriorityTransition`, `EstimateTransition`, `PriorityChangeKind`, `CanonicalState`, `ConfidenceLevel` |
 | `mapping.py` | `FieldMapping`, `MappingSet` — agent-assisted field mappings |
 | `reliability.py` | `DiagnosticReliability`, `FailureModeDiagnostic` |
 
@@ -192,6 +192,8 @@ Adapters translate raw source-system payloads into canonical `WorkItem` objects.
 The Jira adapter derives `started_at` from the first changelog transition into `IN_PROGRESS`. Items that never entered that state receive `started_at: null` with confidence `missing`.
 
 The Jira adapter extracts `priority_history` from changelog entries for both explicit priority field changes (`priority`) and backlog rank/order movement (`Rank` / `customfield_10019`). Each `PriorityTransition` records `change_kind` (`priority` or `rank`) and the raw `source_field` so downstream detectors can distinguish drag-and-drop reprioritization from explicit priority edits.
+
+The Jira adapter extracts `estimate_history` from changelog entries for the Story Points custom field (`customfield_10016`), alongside a current-state `estimate` for disclosure. Batch fetch requests `customfield_10016` explicitly so current-state estimate is populated (changelog already carried history without it). When the changelog is present, `field_confidence["estimate_history"]` is `explicit` even if the list is empty (confirmed absence of estimate transitions); it is `missing` only when the changelog itself is absent. Estimate history is Jira-only for now — ADO/Linear and other adapters still need estimate-history wiring before this is multi-source. Native `timeoriginalestimate`/`timeestimate`, issue-type history, and parent history are out of scope.
 
 The ADO adapter derives `started_at` from the first revision whose `System.State` maps to `IN_PROGRESS`, and builds `state_history` by comparing `System.State` across consecutive revisions.
 
@@ -223,4 +225,4 @@ Run the ontology test suite with coverage:
 python -m pytest tests/ -v --cov=clearline.ontology --cov-report=term-missing
 ```
 
-Tests cover `WorkItem`, `StateTransition`, `PriorityTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, `FailureModeDiagnostic`, and adapter transforms for Jira (including priority and rank changelog history), GitLab, GitHub Issues, and Bitbucket.
+Tests cover `WorkItem`, `StateTransition`, `PriorityTransition`, `EstimateTransition`, `FieldMapping`, `MappingSet`, `DiagnosticReliability`, `FailureModeDiagnostic`, and adapter transforms for Jira (including priority, rank, sprint, and estimate changelog history), GitLab, GitHub Issues, and Bitbucket.

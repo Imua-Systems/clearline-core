@@ -6,6 +6,7 @@ All notable changes to this project are documented here.
 
 ### Added
 
+- **`EstimateTransition` ontology type and `WorkItem.estimate` / `estimate_history`** (`clearline/ontology/v1/core.py`) — timestamped story-point changes (`from_value`/`to_value` as `Optional[float]`, `transitioned_at`, `transitioned_by`, `source_field`) plus current-state estimate for disclosure; Jira adapter maps `customfield_10016` ("Story Points") changelog and current value, excludes Story Points from unsupported-field tracking, and sets `field_confidence["estimate_history"]` to `explicit` when the changelog was evaluated (including empty confirmed-absence) or `missing` when changelog is absent; `jira_batch` now requests `customfield_10016` for current-state estimate (IMUA-135). Native time fields, issue-type/parent history, and non-Jira adapters are out of scope.
 - **`PriorityChangeKind` enum** (`clearline/ontology/v1/core.py`) — distinguishes explicit priority field changes (`priority`) from backlog rank/order movement (`rank`) on `PriorityTransition`
 - **Rank history probe** (`scripts/probe_rank_history.py`) — fetches live Jira issues and reports priority-history transitions split by `change_kind` (IMUA-102)
 - **GitLab adapter** (`clearline/adapters/gitlab.py`) — transforms GitLab issue dicts and `resource_state_events` into canonical `WorkItem` objects; exports `GITLAB_STATE_MAP` and `gitlab_issue_to_work_item` from `clearline.ontology.v1` (IMUA-46)
