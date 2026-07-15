@@ -21,8 +21,11 @@ from pathlib import Path
 
 from clearline.ontology.v1.core import (
     ONTOLOGY_VERSION,
+    ClosedSprintRef,
     EstimateTransition,
     PriorityTransition,
+    Sprint,
+    SprintContext,
     SprintTransition,
     StateTransition,
     WorkItem,
@@ -39,6 +42,9 @@ SCHEMA_EXPORTS: list[tuple[type, str]] = [
     (PriorityTransition, "priority_transition.json"),
     (EstimateTransition, "estimate_transition.json"),
     (SprintTransition, "sprint_transition.json"),
+    (Sprint, "sprint.json"),
+    (ClosedSprintRef, "closed_sprint_ref.json"),
+    (SprintContext, "sprint_context.json"),
     (FieldMapping, "field_mapping.json"),
     (MappingSet, "mapping_set.json"),
     (DiagnosticReliability, "diagnostic_reliability.json"),
