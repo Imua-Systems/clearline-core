@@ -35,9 +35,10 @@ FIELDS = [
     "updated",
     "labels",
     "parent",
-    "customfield_10020",
-    "resolutiondate",
-]
+        "customfield_10020",
+        "customfield_10016",
+        "resolutiondate",
+    ]
 MAX_RESULTS = 50
 REPORT_PATH = Path("reports/meridian_parity.json")
 
