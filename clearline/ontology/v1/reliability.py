@@ -43,6 +43,10 @@ class Signal(BaseModel):
     description: str
     severity: Literal["low", "medium", "high"]
     affected_items: list[str] = Field(default_factory=list)
+    # Evidence provenance (IMUA-137): optional metadata consumers may attach.
+    # Omitted by default so existing Signal construction sites are unchanged.
+    evidence_type: Optional[str] = None
+    source_fields: Optional[list[str]] = None
 
 
 class Finding(BaseModel):
