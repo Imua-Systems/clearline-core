@@ -36,6 +36,7 @@ from clearline.ontology.v1 import (
     MappingSet,
     MappingStatus,
     ReliabilityBand,
+    Signal,
     StateTransition,
     WorkItem,
 )
@@ -285,6 +286,46 @@ def test_mapping_set_empty():
     )
     assert ms.coverage == 0.0
     assert ms.validation_coverage == 0.0
+
+
+def test_signal_omitted_evidence_fields_serialization_and_equality():
+    """IMUA-137: omitting evidence_type/source_fields preserves prior behavior."""
+    a = Signal(
+        type="priority_change_confirmed",
+        description="Changelog confirms priority changed.",
+        severity="medium",
+        affected_items=["ITEM-1"],
+    )
+    b = Signal(
+        type="priority_change_confirmed",
+        description="Changelog confirms priority changed.",
+        severity="medium",
+        affected_items=["ITEM-1"],
+    )
+    assert a == b
+    assert a.evidence_type is None
+    assert a.source_fields is None
+    dumped = a.model_dump()
+    assert dumped["evidence_type"] is None
+    assert dumped["source_fields"] is None
+    assert Signal.model_validate(dumped) == a
+
+
+def test_signal_preserves_evidence_type_and_source_fields():
+    """IMUA-137: intentional evidence provenance is retained, not dropped."""
+    signal = Signal(
+        type="priority_change_confirmed",
+        description="Changelog confirms priority changed.",
+        severity="high",
+        affected_items=["ITEM-1"],
+        evidence_type="confirmed",
+        source_fields=["priority_history", "priority"],
+    )
+    assert signal.evidence_type == "confirmed"
+    assert signal.source_fields == ["priority_history", "priority"]
+    dumped = signal.model_dump()
+    assert dumped["evidence_type"] == "confirmed"
+    assert dumped["source_fields"] == ["priority_history", "priority"]
 
 
 def test_diagnostic_reliability_high():
